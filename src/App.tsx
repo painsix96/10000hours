@@ -8,7 +8,10 @@ import {
   Settings,
   Clock,
   TrendingUp,
-  Award
+  Award,
+  LogOut,
+  LogIn,
+  User
 } from 'lucide-react';
 import { useStorage } from './storage';
 import { ProjectCard } from './components/ProjectCard';
@@ -16,12 +19,15 @@ import { ProjectDetail } from './components/ProjectDetail';
 import { ProjectForm } from './components/ProjectForm';
 import { Project, TARGET_SECONDS } from './types';
 import { cn, formatDuration } from './lib/utils';
+import { signIn, logOut } from './firebase';
+import { AuthScreen } from './components/AuthScreen';
 
 export default function App() {
   const { 
     projects, 
     logs, 
     loading, 
+    user,
     addProject, 
     updateProject, 
     deleteProject, 
@@ -66,6 +72,10 @@ export default function App() {
     );
   }
 
+  if (!user) {
+    return <AuthScreen />;
+  }
+
   if (selectedProject) {
     return (
       <ProjectDetail
@@ -89,13 +99,30 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
       <header className="bg-white px-6 pt-12 pb-6 rounded-b-[40px] shadow-sm">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-black text-gray-900 tracking-tight">一万小时</h1>
             <p className="text-gray-500 font-medium">精进人生，从每一刻开始。</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
-            <Award size={28} />
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-3 bg-gray-50 p-1.5 pr-4 rounded-full border border-gray-100">
+              {user.photoURL ? (
+                <img src={user.photoURL} alt={user.displayName || ''} className="w-8 h-8 rounded-full" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                  <User size={16} />
+                </div>
+              )}
+              <span className="text-xs font-bold text-gray-700 truncate max-w-[80px]">
+                {user.displayName?.split(' ')[0] || '用户'}
+              </span>
+              <button 
+                onClick={logOut}
+                className="text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         </div>
 

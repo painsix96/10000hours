@@ -1,75 +1,188 @@
 import { useState, useEffect } from 'react';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  setDoc,
+  getDocFromServer,
+  writeBatch
+} from 'firebase/firestore';
+import { auth, db } from './firebase';
 import { Project, TimeLog } from './types';
 
-const PROJECTS_KEY = '10000hours_projects';
-const LOGS_KEY = '10000hours_logs';
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 export function useStorage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [logs, setLogs] = useState<TimeLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(auth.currentUser);
 
   useEffect(() => {
-    const storedProjects = localStorage.getItem(PROJECTS_KEY);
-    const storedLogs = localStorage.getItem(LOGS_KEY);
+    const unsubscribeAuth = auth.onAuthStateChanged((u) => {
+      setUser(u);
+      if (!u) {
+        setProjects([]);
+        setLogs([]);
+        setLoading(false);
+      }
+    });
 
-    if (storedProjects) setProjects(JSON.parse(storedProjects));
-    if (storedLogs) setLogs(JSON.parse(storedLogs));
-    
-    setLoading(false);
+    return () => unsubscribeAuth();
   }, []);
 
-  const saveProjects = (newProjects: Project[]) => {
-    setProjects(newProjects);
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(newProjects));
-  };
+  useEffect(() => {
+    if (!user) return;
 
-  const saveLogs = (newLogs: TimeLog[]) => {
-    setLogs(newLogs);
-    localStorage.setItem(LOGS_KEY, JSON.stringify(newLogs));
-  };
+    setLoading(true);
 
-  const addProject = (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newProject: Project = {
-      ...project,
-      id: Math.random().toString(36).substr(2, 9),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+    const projectsQuery = query(collection(db, 'projects'), where('uid', '==', user.uid));
+    const logsQuery = query(collection(db, 'logs'), where('uid', '==', user.uid));
+
+    const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
+      const projectsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Project));
+      setProjects(projectsData);
+      setLoading(false);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
+
+    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
+      const logsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TimeLog));
+      setLogs(logsData);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'logs'));
+
+    return () => {
+      unsubscribeProjects();
+      unsubscribeLogs();
     };
-    saveProjects([...projects, newProject]);
-    return newProject;
+  }, [user]);
+
+  const addProject = async (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!user) return;
+    const path = 'projects';
+    try {
+      const docRef = doc(collection(db, path));
+      const newProject = {
+        ...project,
+        id: docRef.id,
+        uid: user.uid,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      await setDoc(docRef, newProject);
+      return newProject;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
   };
 
-  const updateProject = (id: string, updates: Partial<Project>) => {
-    const newProjects = projects.map(p => 
-      p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
-    );
-    saveProjects(newProjects);
+  const updateProject = async (id: string, updates: Partial<Project>) => {
+    if (!user) return;
+    const path = `projects/${id}`;
+    try {
+      const docRef = doc(db, 'projects', id);
+      await updateDoc(docRef, { ...updates, updatedAt: Date.now() });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
   };
 
-  const deleteProject = (id: string) => {
-    saveProjects(projects.filter(p => p.id !== id));
-    saveLogs(logs.filter(l => l.projectId !== id));
-  };
-
-  const addLog = (projectId: string, seconds: number) => {
-    const newLog: TimeLog = {
-      id: Math.random().toString(36).substr(2, 9),
-      projectId,
-      seconds,
-      startTime: Date.now() - seconds * 1000,
-      endTime: Date.now(),
-    };
-    
-    const newLogs = [...logs, newLog];
-    saveLogs(newLogs);
-
-    // Update project total time
-    const project = projects.find(p => p.id === projectId);
-    if (project) {
-      updateProject(projectId, { 
-        totalSeconds: project.totalSeconds + seconds 
+  const deleteProject = async (id: string) => {
+    if (!user) return;
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'projects', id));
+      
+      // Delete associated logs
+      const projectLogs = logs.filter(l => l.projectId === id);
+      projectLogs.forEach(l => {
+        batch.delete(doc(db, 'logs', l.id));
       });
+
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
+    }
+  };
+
+  const addLog = async (projectId: string, seconds: number) => {
+    if (!user) return;
+    const path = 'logs';
+    try {
+      const logRef = doc(collection(db, path));
+      const newLog: TimeLog = {
+        id: logRef.id,
+        projectId,
+        seconds,
+        startTime: Date.now() - seconds * 1000,
+        endTime: Date.now(),
+        uid: user.uid,
+      };
+      
+      await setDoc(logRef, newLog);
+
+      // Update project total time
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        await updateProject(projectId, { 
+          totalSeconds: project.totalSeconds + seconds 
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
     }
   };
 
@@ -77,6 +190,7 @@ export function useStorage() {
     projects,
     logs,
     loading,
+    user,
     addProject,
     updateProject,
     deleteProject,

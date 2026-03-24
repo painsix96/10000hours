@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A project the user is tracking time for.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "totalSeconds": { "type": "number" },
+        "isArchived": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "name", "totalSeconds", "isArchived", "createdAt", "updatedAt", "uid"]
+    },
+    "TimeLog": {
+      "title": "TimeLog",
+      "description": "A single session of time tracked for a project.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "seconds": { "type": "number" },
+        "startTime": { "type": "number" },
+        "endTime": { "type": "number" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "projectId", "seconds", "startTime", "endTime", "uid"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Collection of tracking projects."
+    },
+    "/logs/{logId}": {
+      "schema": "TimeLog",
+      "description": "Collection of time logs."
+    }
+  }
+}

@@ -99,13 +99,13 @@ export function ProjectDetail({
             <div className="flex justify-between items-end mb-4">
               <div>
                 <span className="text-4xl font-bold text-gray-900">{progress}%</span>
-                <p className="text-sm text-gray-500 mt-1">Mastery Progress</p>
+                <p className="text-sm text-gray-500 mt-1">精通进度</p>
               </div>
               <div className="text-right">
                 <span className="text-lg font-semibold" style={{ color: project.color }}>
                   {Math.floor(project.totalSeconds / 3600)}h
                 </span>
-                <p className="text-xs text-gray-400">Total Invested</p>
+                <p className="text-xs text-gray-400">累计投入</p>
               </div>
             </div>
             <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden">

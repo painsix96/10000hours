@@ -9,6 +9,7 @@ export interface Project {
   isArchived: boolean;
   color: string;
   icon: string;
+  uid: string;
 }
 
 export interface TimeLog {
@@ -18,6 +19,7 @@ export interface TimeLog {
   startTime: number;
   endTime: number;
   note?: string;
+  uid: string;
 }
 
 export const TARGET_HOURS = 10000;
